@@ -1,0 +1,1 @@
+results = retrieve_dense(query_string,1, chunks)

@@ -1,0 +1,44 @@
+# version: '3.8'
+
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: ragradar_qdrant
+    ports:
+      - "6333:6333" # HTTP REST API Port
+      - "6334:6334" # High-speed gRPC API Port
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    networks:
+      - ragradar_network
+    restart: unless-stopped
+
+  rag_app:
+    
+    build:
+      context: .
+      dockerfile: demo_target_app/Dockerfile
+    container_name: ragradar_app
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./demo_target_app/app:/code/app
+    environment:
+      - ENV=development
+      - LLM_MODEL_NAME=llama3-8b-8192
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - QDRANT_URL=http://qdrant:6333
+      # - QDRANT_HOST=http://qdrant:6333
+    networks:
+      - ragradar_network
+    depends_on:
+      - qdrant
+    restart: unless-stopped
+
+volumes:
+  qdrant_storage:
+
+networks:
+  ragradar_network:
+    driver: bridge

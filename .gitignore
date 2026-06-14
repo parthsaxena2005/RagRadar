@@ -1,0 +1,45 @@
+# Python & Local Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.poetry/
+
+# Docker & Local DB Infrastructure
+qdrant_storage_local/
+.docker/
+
+# Security, Credentials & Environment
+.env
+.env.local
+.env.development
+.env.production
+*.pem
+*.key
+*.secret
+
+# Machine Learning Caches & Data Bloat
+.cache/
+demo_target_app/app/data/
+*.bin
+*.pt
+*.onnx
+*.pkl
+
+# OS Specific (Windows / macOS)
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# Raw data files
+demo_target_app/app/data/
+demo_target_app/app/data/sec-edgar-filings/
+demo_target_app/app/data/*.txt
+*.csv
+*.jsonl
