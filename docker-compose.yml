@@ -22,13 +22,15 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./demo_target_app/app:/code/app
+      - .:/code
+      - fastembed_cache_volume:/models/fastembed_cache #to share models across containers
     environment:
       - ENV=development
       - LLM_MODEL_NAME=llama3-8b-8192
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
       - QDRANT_URL=http://qdrant:6333
+      - PYTHONPATH=/code
       # - QDRANT_HOST=http://qdrant:6333
     networks:
       - ragradar_network
@@ -38,6 +40,7 @@ services:
 
 volumes:
   qdrant_storage:
+  fastembed_cache_volume:
 
 networks:
   ragradar_network:

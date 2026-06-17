@@ -4,9 +4,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from demo_target_app.app.services.ingest import chunk_text_by_tokens
-from demo_target_app.app.services.retriever import top_k_simmilar_rankbm25
-from demo_target_app.app.services.retriever import retrieve_hybrid
-from demo_target_app.app.services.retriever import retrieve_dense
+from demo_target_app.app.services.manual_retriever import top_k_simmilar_rankbm25
+from demo_target_app.app.services.manual_retriever import retrieve_hybrid
+from demo_target_app.app.services.manual_retriever import retrieve_dense
 from demo_target_app.app.Scripts.chunk_transcripts import clean_sec_text
 
 

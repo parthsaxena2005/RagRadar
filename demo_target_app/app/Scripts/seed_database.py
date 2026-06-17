@@ -1,14 +1,17 @@
 import os
 from pathlib import Path
 
-hf_cache_dir = Path(os.path.expanduser("~")) / ".cache" / "huggingface" / "hub"
-if (hf_cache_dir / "models--nomic-ai--nomic-embed-text-v1.5").exists():
-    os.environ["HF_HUB_OFFLINE"] = "1"
-    os.environ["TRANSFORMERS_OFFLINE"] = "1"
-from sentence_transformers import SentenceTransformer
+# hf_cache_dir = Path(os.path.expanduser("~")) / ".cache" / "huggingface" / "hub"
+# if (hf_cache_dir / "models--nomic-ai--nomic-embed-text-v1.5").exists():
+#     os.environ["HF_HUB_OFFLINE"] = "1"
+#     os.environ["TRANSFORMERS_OFFLINE"] = "1"
+
+# from sentence_transformers import SentenceTransformer
+# swapping sentence transformer to fastembed to optiimize processing time and docker image size
+from fastembed import TextEmbedding, SparseTextEmbedding
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams
+from qdrant_client.models import Distance, VectorParams, SparseVectorParams, SparseVector
 from qdrant_client.models import PointStruct
 
 
@@ -22,21 +25,26 @@ def seed_vector_database():
 
     COLLECTION_NAME="sec_transcripts"
 
-    if not client.collection_exists(collection_name=COLLECTION_NAME):
-        
+    if not client.collection_exists(collection_name=COLLECTION_NAME):        
         client.create_collection(collection_name=COLLECTION_NAME,
-                                vectors_config=(VectorParams(size=768 , distance=Distance.DOT))
+                                vectors_config={"dense": (VectorParams(size=768 , distance=Distance.DOT))},
+                                sparse_vectors_config={"bm25": SparseVectorParams()}
+                                
                                 )
         print("Collection created successfully.")
     else:
         print(f"collection {COLLECTION_NAME} already exists")
-    model = SentenceTransformer("nomic-ai/nomic-embed-text-v1.5", trust_remote_code=True)
+    # model = SentenceTransformer("nomic-ai/nomic-embed-text-v1.5", trust_remote_code=True)
+    dense_model = TextEmbedding("nomic-ai/nomic-embed-text-v1.5",cache_dir="/models/fastembed_cache", threads=12)
+
+    sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25",cache_dir="/models/fastembed_cache", threads=12)
+    
     all_processed_chunks = pipeline_process_and_chunk()
     totalchunks = len(all_processed_chunks)
     print(f"Extractesd {totalchunks} chunks for vector transformation")
     
     
-    batch_size = 256
+    batch_size = 32
     
     for start in range(0, len(all_processed_chunks),batch_size):
         end = min(start+batch_size, totalchunks)
@@ -53,14 +61,19 @@ def seed_vector_database():
         )
 
         if(len(existing_points) == len(batch_chunks)):
-            print("skipping points [{start}-{end}] : Already indexed in DB")
+            print(f"skipping points [{start}-{end}] : Already indexed in DB")
             continue
 
         batch_contents = [chunk["content"] for chunk in batch_chunks]
-        batch_vectors = model.encode(batch_contents, convert_to_numpy=True)
+        # batch_vectors = model.encode(batch_contents, convert_to_numpy=True)
+        batch_vectors_dense = list(dense_model.embed(batch_contents))
+        batch_vectors_sparse = list(sparse_model.embed(batch_contents)) 
+        #Converting to list because: fastembed returns generators, which is why wrapping them in list() is standard practice when packing them into Qdrant PointStruct payload.
     
+        
 
         point_struct_list = []
+
 
         for local_idx , chunk in enumerate(batch_chunks):
             global_id = start+local_idx
@@ -68,7 +81,16 @@ def seed_vector_database():
 
             point = PointStruct(
                 id = global_id,
-                vector=batch_vectors[local_idx].tolist(),
+                # vector=batch_vectors[local_idx].tolist(),
+
+                vector = {
+                    "dense": batch_vectors_dense[local_idx].tolist(),
+                    "bm25": SparseVector(
+                        indices=batch_vectors_sparse[local_idx].indices.tolist(),
+                        values=batch_vectors_sparse[local_idx].values.tolist()
+                    )
+                },
+
                 payload={
                     "content": chunk["content"],
                     "company": metadata.get("company", "UNKNOWN"),
@@ -78,16 +100,7 @@ def seed_vector_database():
             )
             point_struct_list.append(point)
 
-    
-        # PointStructlist = [PointStruct(id=i+start, vector=x, 
-        #                                payload={"content":y["content"],
-        #                                         "company":y["metadata"]["company"],
-        #                                         "quarter":y["metadata"]["quarter"],
-        #                                         "section":y["metadata"]["section"],
-        #                                          })
-        #                      for i,(x,y) in 
-        #                     enumerate(zip(vectorized_chunks[start:start+batch_size], all_processed_chunks[start:start+batch_size]),
-        #                     start=start) ]
+
         operation_info = client.upsert(
             collection_name=COLLECTION_NAME, wait=False,
             points = point_struct_list,
