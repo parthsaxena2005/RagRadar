@@ -1,6 +1,6 @@
 import os
 from qdrant_client import QdrantClient
-from qdrant_client.models import Prefetch, QueryResponse
+from qdrant_client.models import Prefetch, QueryResponse, SparseVector, FusionQuery, Fusion
 from fastembed import TextEmbedding, SparseTextEmbedding
 from typing import List
 client = QdrantClient(os.getenv("QDRANT_URL", "http://localhost:6333"))
@@ -30,12 +30,12 @@ class HybridRetriever:
         )
         return self._format_results(results)
 
-    def retrieve_bm25(self,query:str , limit: int = 5):
+    def retrieve_bm25(self,query:str , limit: int = 5) -> List[dict]:
         _, sparse_result = self._embed_query(query)
 
         results = self.client.search(
             collection_name= self.collection_name,
-            query_vector = ("bm25", {"indices": sparse_result.indices.tolist(), "values": sparse_result.values.tolist()}),
+            query_vector = ("bm25", SparseVector(indices= sparse_result.indices.tolist(), values= sparse_result.values.tolist())),
             limit = limit,
             with_payload = True
         )
@@ -50,7 +50,7 @@ class HybridRetriever:
             limit = limit*2
         )
         prefetch_sparse = Prefetch(
-            query = {"indices": sparse_result.indices.tolist(), "values": sparse_result.values.tolist()},
+            query = SparseVector(indices= sparse_result.indices.tolist(), values= sparse_result.values.tolist()),
             using="bm25",
             limit = limit*2
         )
@@ -58,7 +58,7 @@ class HybridRetriever:
         results = self.client.query_points(
             collection_name= self.collection_name,
             prefetch= [prefetch_dense , prefetch_sparse],
-            query = {"rrf": {"window_size": limit *2}}, 
+            query = FusionQuery(fusion = Fusion.RRF), # {"rrf": {"window_size": limit *2}}, 
             limit = limit,
             with_payload= True
         )
@@ -71,7 +71,7 @@ class HybridRetriever:
 
         for point in points:
             formatted.append({
-                "chunk_id": point.id,
+                "chunk_id": str(point.id),
                 "text": point.payload.get("content", ""),
                 "similarity_score": round(point.score, 4),
                 "metadata": {
@@ -82,3 +82,5 @@ class HybridRetriever:
                 }
             })
         return formatted
+    
+    # HyDE retreval is done from llm.py
