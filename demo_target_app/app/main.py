@@ -16,6 +16,7 @@ llm_engine = LLMEngine()
 
 #DataModels
 from .services.models import QueryRequest, TracePayload
+from .services.queue import push_trace_to_queue
 
 @app.post("/query", response_model=TracePayload)
 async def execute_query(request: QueryRequest): # Executes the full RAG pipeline and returns an observable trace payload.
@@ -23,7 +24,7 @@ async def execute_query(request: QueryRequest): # Executes the full RAG pipeline
     start_time_total = time.time()
     trace_id = str(uuid.uuid4())
     
-    # ── A. RETRIEVAL PHASE ──
+    # RETRIEVAL PHASE
     start_time_retrieval = time.time()
     
     try:
@@ -53,7 +54,7 @@ async def execute_query(request: QueryRequest): # Executes the full RAG pipeline
     answer, llm_latency_ms = llm_engine.generate_final_answer(request.question, chunks)
 
 
-    # ── C. OBSERVABILITY PAYLOAD ──
+    # OBSERVABILITY PAYLOAD
     total_latency_ms = int((time.time() - start_time_total) * 1000)
     
     metrics = {
@@ -64,7 +65,7 @@ async def execute_query(request: QueryRequest): # Executes the full RAG pipeline
     }
 
     # This payload matches the exact JSON schema required by RAGRadar
-    return TracePayload(
+    trace = TracePayload(
         trace_id=trace_id,
         question=request.question,
         answer=answer,
@@ -72,6 +73,10 @@ async def execute_query(request: QueryRequest): # Executes the full RAG pipeline
         chunks=chunks,
         metrics=metrics
     )
+
+    push_trace_to_queue(trace.model_dump())
+
+    return trace
 
 @app.get("/health")
 def health_check():
