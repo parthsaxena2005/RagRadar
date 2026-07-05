@@ -18,6 +18,8 @@ class TraceRecord(Base):
     question = Column(String, nullable=False)
     answer = Column(String,nullable=False)
 
+    retrieval_mode = Column(String, nullable=False)
+
     chunks = Column(JSON, nullable=False)
     metrics = Column(JSON, nullable=False)
 
